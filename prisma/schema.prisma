@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// MEMBER: eigene Notizen. DOJO_LEITER: sieht und gibt Notizen des eigenen Dojos frei.
+/// DAI_SHIHAN: gibt Dojo-Inhalte für die ganze Gemeinschaft frei. ADMIN: alles, inkl. Verwaltung.
+enum Role {
+  MEMBER
+  DOJO_LEITER
+  DAI_SHIHAN
+  ADMIN
+}
+
+/// Neue Registrierungen sind PENDING, bis ein Dojo-Leiter oder Admin sie freischaltet.
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+/// Freigabestufe einer Notiz: privat -> Dojo -> ganze Gemeinschaft.
+enum Visibility {
+  PRIVATE
+  DOJO
+  COMMUNITY
+}
+
+enum CategoryKind {
+  RYUHA
+  WAFFE
+}
+
+model Dojo {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+  notes     Note[]
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         Role       @default(MEMBER)
+  status       UserStatus @default(PENDING)
+  dojoId       String?
+  dojo         Dojo?      @relation(fields: [dojoId], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+  sessions     Session[]
+  notes        Note[]     @relation("NoteAuthor")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  kind        CategoryKind
+  slug        String       @unique
+  name        String
+  description String?
+  sortOrder   Int          @default(0)
+  notes       Note[]
+}
+
+model Note {
+  id                  String     @id @default(cuid())
+  title               String
+  content             String
+  visibility          Visibility @default(PRIVATE)
+  authorId            String
+  author              User       @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  /// Dojo der Notiz, beim Anlegen vom Autor übernommen.
+  dojoId              String?
+  dojo                Dojo?      @relation(fields: [dojoId], references: [id], onDelete: SetNull)
+  categoryId          String
+  category            Category   @relation(fields: [categoryId], references: [id])
+  videos              Video[]
+  dojoReleasedAt      DateTime?
+  dojoReleasedBy      String?
+  communityReleasedAt DateTime?
+  communityReleasedBy String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@index([categoryId, visibility])
+  @@index([dojoId, visibility])
+  @@index([authorId])
+}
+
+model Video {
+  id        String @id @default(cuid())
+  url       String
+  title     String?
+  sortOrder Int    @default(0)
+  noteId    String
+  note      Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+}
